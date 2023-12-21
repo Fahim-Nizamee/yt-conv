@@ -23,7 +23,7 @@ function App() {
                 return;
             }
 
-            const response = await axios.post(`http://api.a3styles.com/${videoId}`, { bitrate }, {
+            const response = await axios.post(`https://converter-ae08.onrender.com/${videoId}`, { bitrate }, {
                 responseType: 'blob',
             });
 
