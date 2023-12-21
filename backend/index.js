@@ -4,6 +4,7 @@ const ffmpeg = require("fluent-ffmpeg");
 const slugify = require("slugify");
 const cors = require("cors");
 const ffmpegPath = require("ffmpeg-static");
+
 const app = express();
 const port = 3001;
 
@@ -15,13 +16,13 @@ ffmpeg.setFfmpegPath(ffmpegPath);
 app.post("/:videoId", async (req, res) => {
     try {
         const videoUrl = `https://www.youtube.com/watch?v=${req.params.videoId}`;
+
         if (!ytdl.validateURL(videoUrl)) {
             return res.status(400).send({ error: "Invalid YouTube Url" });
         }
 
         const videoInfo = await ytdl.getBasicInfo(videoUrl);
-        const fileName =
-            slugify(videoInfo.videoDetails.title, { replacement: " ", locale: "en", remove: /[\/\?<>\\:\*\|"]/g }) || "file";
+        const fileName = slugify(videoInfo.videoDetails.title, { replacement: " ", locale: "en", remove: /[\/\?<>\\:\*\|"]/g }) || "file";
         const sanitizedFileName = encodeURIComponent(fileName);
 
         res.set({
@@ -47,7 +48,6 @@ app.post("/:videoId", async (req, res) => {
         convertAudio
             .on("end", () => {
                 console.log('Conversion finished');
-                res.write("data: 100\n\n"); // Signal 100% progress when conversion is complete
                 res.end();
             })
             .on("error", (err) => {
@@ -55,10 +55,6 @@ app.post("/:videoId", async (req, res) => {
                 convertAudio.kill();
                 downloadAudio.destroy();
                 res.status(400).send({ error: "Download canceled by the user" });
-            })
-            .on("progress", (progress) => {
-                const percentage = Math.floor(progress.percent);
-                res.write(`data: ${percentage}\n\n`);
             })
             .pipe(res, { end: true });
     } catch (err) {
