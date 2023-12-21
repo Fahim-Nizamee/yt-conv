@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
 function App() {
     const [youtubeLink, setYoutubeLink] = useState('');
     const [bitrate, setBitrate] = useState(320); // Default bitrate
     const [error, setError] = useState(null);
+    const [progress, setProgress] = useState(0);
+    const [eventSource, setEventSource] = useState(null);
 
     const extractVideoId = (link) => {
         const url = new URL(link);
@@ -14,8 +16,8 @@ function App() {
     const handleDownload = async () => {
         try {
             setError(null);
+            setProgress(0);
 
-            // Extract video ID from the YouTube link
             const videoId = extractVideoId(youtubeLink);
 
             if (!videoId) {
@@ -23,18 +25,33 @@ function App() {
                 return;
             }
 
-            const response = await axios.post(`https://converter-ae08.onrender.com/${videoId}`, { bitrate }, {
-                responseType: 'blob',
-            });
+            const es = new EventSource(`http://localhost:3001/${videoId}`);
+            es.onmessage = (event) => {
+                const percentage = parseInt(event.data, 10);
+                setProgress(percentage);
+                console.log(percentage)
+
+                if (percentage === 100) {
+                    es.close(); // Close EventSource when progress reaches 100%
+                }
+            };
+            setEventSource(es);
+
+            const response = await axios.post(
+                `http://localhost:3001/${videoId}`,
+                { bitrate },
+                {
+                    responseType: 'blob',
+                    onDownloadProgress: (progressEvent) => {
+                        const percentage = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                        setProgress(percentage);
+                    },
+                }
+            );
 
             const contentDisposition = response.headers['content-disposition'];
-            //   console.log('Content-Disposition:', contentDisposition);
-
             const filenameMatch = contentDisposition && contentDisposition.match(/filename="(.+)"/);
-            //   console.log('Filename Match:', filenameMatch);
-
             const filename = filenameMatch ? decodeURIComponent(filenameMatch[1]) : 'download.mp3';
-            //   console.log('Final Filename:', filename);
 
             const blob = new Blob([response.data], { type: 'audio/mpeg' });
             const url = window.URL.createObjectURL(blob);
@@ -45,11 +62,22 @@ function App() {
             a.click();
             document.body.removeChild(a);
             window.URL.revokeObjectURL(url);
+
         } catch (err) {
             setError('Error downloading audio');
             console.error(err);
         }
     };
+
+    useEffect(() => {
+        // Clean up the EventSource when the component is unmounted
+        return () => {
+            if (eventSource) {
+                eventSource.close();
+                setEventSource(null); // Clear the event source reference
+            }
+        };
+    }, [eventSource]);
 
     return (
         <div className="App">
@@ -72,6 +100,12 @@ function App() {
                 </select>
             </div>
             <button onClick={handleDownload}>Download Audio</button>
+            {progress > 0 && (
+                <div>
+                    <label>Progress: {progress}%</label>
+                    <progress value={progress} max={100} />
+                </div>
+            )}
             {error && <p style={{ color: 'red' }}>{error}</p>}
         </div>
     );
